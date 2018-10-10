@@ -23,9 +23,9 @@ The mock of the first filter to pass will be used. The exception to this
 rule are Mocks with no filters. They will always be evaluated last since
 they will act as a "catch all" mock.
 
-Mocks can be marked Verifiable. If so, the Assert-VerifiableMocks command
+Mocks can be marked Verifiable. If so, the Assert-VerifiableMock command
 can be used to check if all Verifiable mocks were actually called. If any
-verifiable mock is not called, Assert-VerifiableMocks will throw an
+verifiable mock is not called, Assert-VerifiableMock will throw an
 exception and indicate all mocks not called.
 
 If you wish to mock commands that are called from inside a script module,
@@ -39,7 +39,7 @@ Each module's mock maintains a separate call history and verified status.
 The name of the command to be mocked.
 
 .PARAMETER MockWith
-A ScriptBlock specifying the behvior that will be used to mock CommandName.
+A ScriptBlock specifying the behavior that will be used to mock CommandName.
 The default is an empty ScriptBlock.
 NOTE: Do not specify param or dynamicparam blocks in this script block.
 These will be injected automatically based on the signature of the command
@@ -47,7 +47,7 @@ being mocked, and the MockWith script block can contain references to the
 mocked commands parameter variables.
 
 .PARAMETER Verifiable
-When this is set, the mock will be checked when Assert-VerifiableMocks is
+When this is set, the mock will be checked when Assert-VerifiableMock is
 called.
 
 .PARAMETER ParameterFilter
@@ -77,7 +77,7 @@ This Mock will only be applied to Get-ChildItem calls within the user's temp dir
 .EXAMPLE
 Mock Set-Content {} -Verifiable -ParameterFilter { $Path -eq "some_path" -and $Value -eq "Expected Value" }
 
-When this mock is used, if the Mock is never invoked and Assert-VerifiableMocks is called, an exception will be thrown. The command behavior will do nothing since the ScriptBlock is empty.
+When this mock is used, if the Mock is never invoked and Assert-VerifiableMock is called, an exception will be thrown. The command behavior will do nothing since the ScriptBlock is empty.
 
 .EXAMPLE
 Mock Get-ChildItem { return @{FullName = "A_File.TXT"} } -ParameterFilter { $Path -and $Path.StartsWith($env:temp\1) }
@@ -108,7 +108,7 @@ Mock Get-ChildItem { return @{FullName = "A_File.TXT"} }
 
 Get-ChildItem $env:temp\me
 
-Here, B_File.TXT will be returned. Even though the filterless mock was created more recently. This illustrates that filterless Mocks are always evaluated last regardlss of their creation order.
+Here, B_File.TXT will be returned. Even though the filterless mock was created more recently. This illustrates that filterless Mocks are always evaluated last regardless of their creation order.
 
 .EXAMPLE
 Mock Get-ChildItem { return @{FullName = "A_File.TXT"} } -ModuleName MyTestModule
@@ -128,16 +128,16 @@ New-Module -Name ModuleMockExample  -ScriptBlock {
 Describe "ModuleMockExample" {
 
     It "Hidden function is not directly accessible outside the module" {
-        { Hidden } | Should Throw
+        { Hidden } | Should -Throw
     }
 
     It "Original Hidden function is called" {
-        Exported | Should Be "Internal Module Function"
+        Exported | Should -Be "Internal Module Function"
     }
 
     It "Hidden is replaced with our implementation" {
         Mock Hidden { "Mocked" } -ModuleName ModuleMockExample
-        Exported | Should Be "Mocked"
+        Exported | Should -Be "Mocked"
     }
 }
 
@@ -147,14 +147,14 @@ mocked by using the -ModuleName parameter.
 
 .LINK
 Assert-MockCalled
-Assert-VerifiableMocks
+Assert-VerifiableMock
 Describe
 Context
 It
 about_Should
 about_Mocking
 #>
-
+    [CmdletBinding()]
     param(
         [string]$CommandName,
         [ScriptBlock]$MockWith={},
@@ -193,7 +193,7 @@ about_Mocking
         Mock       = $mockWithCopy
         Filter     = $ParameterFilter
         Verifiable = $Verifiable
-        Scope      = Get-ScopeForMock -PesterState $pester
+        Scope      = $pester.CurrentTestGroup
     }
 
     $mock = $mockTable["$ModuleName||$CommandName"]
@@ -218,7 +218,7 @@ about_Mocking
             $null = $metadata.Parameters.Remove('OutVariable')
             $null = $metadata.Parameters.Remove('OutBuffer')
 
-            # Some versions of powershell may include dynamic parameters here
+            # Some versions of PowerShell may include dynamic parameters here
             # We will filter them out and add them at the end to be
             # compatible with both earlier and later versions
             $dynamicParams = $metadata.Parameters.Values | & $SafeCommands['Where-Object'] {$_.IsDynamic}
@@ -234,11 +234,11 @@ about_Mocking
                 $cmdletBinding = $cmdletBinding.Insert($cmdletBinding.Length-2, 'PositionalBinding=$false')
             }
 
-            $paramBlock    = [Management.Automation.ProxyCommand]::GetParamBlock($metadata)
+            $paramBlock = [Management.Automation.ProxyCommand]::GetParamBlock($metadata)
 
             if ($contextInfo.Command.CommandType -eq 'Cmdlet')
             {
-                $dynamicParamBlock = "dynamicparam { Get-MockDynamicParameters -CmdletName '$($contextInfo.Command.Name)' -Parameters `$PSBoundParameters }"
+                $dynamicParamBlock = "dynamicparam { Get-MockDynamicParameter -CmdletName '$($contextInfo.Command.Name)' -Parameters `$PSBoundParameters }"
             }
             else
             {
@@ -247,14 +247,14 @@ about_Mocking
                 if ($dynamicParamStatements -match '\S')
                 {
                     $metadataSafeForDynamicParams = [System.Management.Automation.CommandMetaData]$contextInfo.Command
-                    foreach ($parameter in $metadataSafeForDynamicParams.Parameters.Values)
+                    foreach ($param in $metadataSafeForDynamicParams.Parameters.Values)
                     {
-                        $parameter.ParameterSets.Clear()
+                        $param.ParameterSets.Clear()
                     }
 
                     $paramBlockSafeForDynamicParams = [System.Management.Automation.ProxyCommand]::GetParamBlock($metadataSafeForDynamicParams)
                     $comma = if ($metadataSafeForDynamicParams.Parameters.Count -gt 0) { ',' } else { '' }
-                    $dynamicParamBlock = "dynamicparam { Get-MockDynamicParameters -ModuleName '$ModuleName' -FunctionName '$CommandName' -Parameters `$PSBoundParameters -Cmdlet `$PSCmdlet }"
+                    $dynamicParamBlock = "dynamicparam { Get-MockDynamicParameter -ModuleName '$ModuleName' -FunctionName '$CommandName' -Parameters `$PSBoundParameters -Cmdlet `$PSCmdlet }"
 
                     $code = @"
                         $cmdletBinding
@@ -281,11 +281,11 @@ about_Mocking
         }
 
         $EscapeSingleQuotedStringContent =
-            if ($global:PSVersionTable.PSVersion.Major -ge 5) {
-                { [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($args[0]) }
-            } else {
-                { $args[0] -replace "['‘’‚‛]", '$&$&' }
-            }
+        if ($global:PSVersionTable.PSVersion.Major -ge 5) {
+            { [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($args[0]) }
+        } else {
+            { $args[0] -replace "['‘’‚‛]", '$&$&' }
+        }
 
         $newContent = & $SafeCommands['Get-Content'] function:\MockPrototype
         $newContent = $newContent -replace '#FUNCTIONNAME#', (& $EscapeSingleQuotedStringContent $CommandName)
@@ -326,46 +326,40 @@ about_Mocking
             Blocks                  = @()
             CommandName             = $CommandName
             SessionState            = $contextInfo.Session
-            Scope                   = $pester.Scope
+            Scope                   = $pester.CurrentTestGroup
+            PesterState             = $pester
             Metadata                = $metadata
             CallHistory             = @()
             DynamicParamScriptBlock = $dynamicParamScriptBlock
-            FunctionScope           = ''
-            Alias                   = $null
+            Aliases                 = @()
+            BootstrapFunctionName   = 'PesterMock_' + [Guid]::NewGuid().Guid
         }
 
         $mockTable["$ModuleName||$CommandName"] = $mock
 
-        if ($contextInfo.Command.CommandType -eq 'Function')
-        {
-            $mock['FunctionScope'] = $contextInfo.Scope
+        $scriptBlock = { $ExecutionContext.InvokeProvider.Item.Set("Function:\script:$($args[0])", $args[1], $true, $true) }
+        $null = Invoke-InMockScope -SessionState $mock.SessionState -ScriptBlock $scriptBlock -ArgumentList $Mock.BootstrapFunctionName, $mockScript
 
-            $scriptBlock =
-            {
-                param ( [string] $CommandName )
+        $mock.Aliases += $CommandName
 
-                if ($ExecutionContext.InvokeProvider.Item.Exists("Function:\$CommandName"))
-                {
-                    $ExecutionContext.InvokeProvider.Item.Rename("Function:\$CommandName", "script:PesterIsMocking_$CommandName", $true)
-                }
-            }
-
-            $null = Invoke-InMockScope -SessionState $mock.SessionState -ScriptBlock $scriptBlock -ArgumentList $CommandName
+        $scriptBlock = {
+            $setAlias = & (Pester\SafeGetCommand) -Name Set-Alias -CommandType Cmdlet -Module Microsoft.PowerShell.Utility
+            & $setAlias -Name $args[0] -Value $args[1] -Scope Script
         }
 
-        $scriptBlock = { $ExecutionContext.InvokeProvider.Item.Set("Function:\script:$($args[0])", $args[1], $true, $true) }
-        $null = Invoke-InMockScope -SessionState $mock.SessionState -ScriptBlock $scriptBlock -ArgumentList $CommandName, $mockScript
+        $null = Invoke-InMockScope -SessionState $mock.SessionState -ScriptBlock $scriptBlock -ArgumentList $CommandName, $mock.BootstrapFunctionName
 
         if ($mock.OriginalCommand.ModuleName)
         {
-            $mock.Alias = "$($mock.OriginalCommand.ModuleName)\$($CommandName)"
+            $aliasName = "$($mock.OriginalCommand.ModuleName)\$($CommandName)"
+            $mock.Aliases += $aliasName
 
             $scriptBlock = {
                 $setAlias = & (Pester\SafeGetCommand) -Name Set-Alias -CommandType Cmdlet -Module Microsoft.PowerShell.Utility
                 & $setAlias -Name $args[0] -Value $args[1] -Scope Script
             }
 
-            $null = Invoke-InMockScope -SessionState $mock.SessionState -ScriptBlock $scriptBlock -ArgumentList $mock.Alias, $CommandName
+            $null = Invoke-InMockScope -SessionState $mock.SessionState -ScriptBlock $scriptBlock -ArgumentList $aliasName, $mock.BootstrapFunctionName
         }
     }
 
@@ -379,7 +373,7 @@ about_Mocking
 }
 
 
-function Assert-VerifiableMocks {
+function Assert-VerifiableMock {
 <#
 .SYNOPSIS
 Checks if any Verifiable Mock has not been invoked. If so, this will throw an exception.
@@ -387,7 +381,7 @@ Checks if any Verifiable Mock has not been invoked. If so, this will throw an ex
 .DESCRIPTION
 This can be used in tandem with the -Verifiable switch of the Mock
 function. Mock can be used to mock the behavior of an existing command
-and optionally take a -Verifiable switch. When Assert-VerifiableMocks
+and optionally take a -Verifiable switch. When Assert-VerifiableMock
 is called, it checks to see if any Mock marked Verifiable has not been
 invoked. If any mocks have been found that specified -Verifiable and
 have not been invoked, an exception will be thrown.
@@ -397,7 +391,7 @@ Mock Set-Content {} -Verifiable -ParameterFilter {$Path -eq "some_path" -and $Va
 
 { ...some code that never calls Set-Content some_path -Value "Expected Value"... }
 
-Assert-VerifiableMocks
+Assert-VerifiableMock
 
 This will throw an exception and cause the test to fail.
 
@@ -406,12 +400,13 @@ Mock Set-Content {} -Verifiable -ParameterFilter {$Path -eq "some_path" -and $Va
 
 Set-Content some_path -Value "Expected Value"
 
-Assert-VerifiableMocks
+Assert-VerifiableMock
 
 This will not throw an exception because the mock was invoked.
 
 #>
-    Assert-DescribeInProgress -CommandName Assert-VerifiableMocks
+    [CmdletBinding()]param()
+    Assert-DescribeInProgress -CommandName Assert-VerifiableMock
 
     $unVerified=@{}
     $mockTable.Keys | & $SafeCommands['ForEach-Object'] {
@@ -427,7 +422,7 @@ This will not throw an exception because the mock was invoked.
             $function = $array[1]
             $module = $array[0]
 
-            $message = "`r`n Expected $function "
+            $message = "$([System.Environment]::NewLine) Expected $function "
             if ($module) { $message += "in module $module " }
             $message += "to be called with $($unVerified[$mock].Filter)"
         }
@@ -468,7 +463,7 @@ An optional filter to qualify wich calls should be counted. Only those
 calls to the mock whose parameters cause this filter to return true
 will be counted.
 
-.PARAMETER ExlusiveFilter
+.PARAMETER ExclusiveFilter
 Like ParameterFilter, except when you use ExclusiveFilter, and there
 were any calls to the mocked command which do not match the filter,
 an exception will be thrown.  This is a convenient way to avoid needing
@@ -585,7 +580,17 @@ param(
     [string] $ModuleName,
 
     [Parameter(Position = 4)]
-    [ValidateSet('Describe','Context','It')]
+    [ValidateScript({
+        if ([uint32]::TryParse($_, [ref] $null) -or
+            $_ -eq 'Describe' -or
+            $_ -eq 'Context' -or
+            $_ -eq 'It')
+        {
+            return $true
+        }
+
+        throw "Scope argument must either be an unsigned integer, or one of the words 'Describe', 'Context', or 'It'."
+    })]
     [string] $Scope,
 
     [switch]$Exactly
@@ -625,16 +630,9 @@ param(
         throw "You did not declare a mock of the $commandName Command${moduleMessage}."
     }
 
-    if (-not $Scope)
+    if (-not $PSBoundParameters.ContainsKey('Scope'))
     {
-        if ($pester.CurrentContext)
-        {
-            $Scope = 'Context'
-        }
-        else
-        {
-            $Scope = 'Describe'
-        }
+        $scope = 1
     }
 
     $matchingCalls = & $SafeCommands['New-Object'] System.Collections.ArrayList
@@ -662,7 +660,7 @@ param(
         }
     }
 
-    $lineText = $MyInvocation.Line.TrimEnd("`n")
+    $lineText = $MyInvocation.Line.TrimEnd("$([System.Environment]::NewLine)")
     $line = $MyInvocation.ScriptLineNumber
 
     if($matchingCalls.Count -ne $times -and ($Exactly -or ($times -eq 0)))
@@ -686,39 +684,84 @@ function Test-MockCallScope
 {
     [CmdletBinding()]
     param (
-        [string] $CallScope,
+        [object] $CallScope,
         [string] $DesiredScope
     )
 
-    # It would probably be cleaner to replace all of these scope strings with an enumerated type at some point.
-    $scopes = 'Describe', 'Context', 'It'
+    if ($null -eq $CallScope)
+    {
+        # This indicates a call from the current test case ("It" block), which always passes Test-MockCallScope
+        return $true
+    }
 
-    return ([array]::IndexOf($scopes, $CallScope) -ge [array]::IndexOf($scopes, $DesiredScope))
+    $testGroups = $pester.TestGroups
+    [Array]::Reverse($testGroups)
+
+    $target = 0
+    $isNumberedScope = [int]::TryParse($DesiredScope, [ref] $target)
+
+    # The Describe / Context stuff here is for backward compatibility.  May be deprecated / removed in the future.
+    $actualScopeNumber = -1
+    $describe = -1
+    $context = -1
+
+    for ($i = 0; $i -lt $testGroups.Count; $i++)
+    {
+        if ($CallScope -eq $testGroups[$i])
+        {
+            $actualScopeNumber = $i
+            if ($isNumberedScope) { break }
+        }
+
+        if ($describe -lt 0 -and $testGroups[$i].Hint -eq 'Describe') { $describe = $i }
+        if ($context -lt 0 -and $testGroups[$i].Hint -eq 'Context') { $context = $i }
+    }
+
+    if ($actualScopeNumber -lt 0)
+    {
+        # this should never happen; if we get here, it's a Pester bug.
+
+        throw "Pester error: Corrupted mock call history table."
+    }
+
+    if ($isNumberedScope)
+    {
+        # For this, we consider scope 0 to be the current test case / It block, scope 1 to be the first Test Group up the stack, etc.
+        # $actualScopeNumber currently off by one from that scale (zero-indexed for test groups only; we already checked for the 0 case
+        # farther up, which only applies if $CallScope is $null).
+        return $target -gt $actualScopeNumber
+    }
+    else
+    {
+        if ($DesiredScope -eq 'Describe') { return $describe -ge $actualScopeNumber }
+        if ($DesiredScope -eq 'Context')  { return $context -ge $actualScopeNumber }
+    }
+
+    return $false
 }
 
 function Exit-MockScope {
+    param (
+        [switch] $ExitTestCaseOnly
+    )
+
     if ($null -eq $mockTable) { return }
 
-    $currentScope = $pester.Scope
-    $parentScope = $pester.ParentScope
-
-    $scriptBlock =
+    $removeMockStub =
     {
         param (
             [string] $CommandName,
-            [string] $Scope,
-            [string] $Alias
+            [string[]] $Aliases
         )
 
         $ExecutionContext.InvokeProvider.Item.Remove("Function:\$CommandName", $false, $true, $true)
-        if ($ExecutionContext.InvokeProvider.Item.Exists("Function:\PesterIsMocking_$CommandName", $true, $true))
-        {
-            $ExecutionContext.InvokeProvider.Item.Rename("Function:\PesterIsMocking_$CommandName", "$Scope$CommandName", $true)
-        }
 
-        if ($Alias -and $ExecutionContext.InvokeProvider.Item.Exists("Alias:$Alias", $true, $true))
+        foreach ($alias in $Aliases)
         {
-            $ExecutionContext.InvokeProvider.Item.Remove("Alias:$Alias", $false, $true, $true)
+            if ($ExecutionContext.InvokeProvider.Item.Exists("Alias:$alias", $true, $true))
+            {
+                $ExecutionContext.InvokeProvider.Item.Remove("Alias:$alias", $false, $true, $true)
+            }
         }
     }
 
@@ -727,77 +770,84 @@ function Exit-MockScope {
     foreach ($mockKey in $mockKeys)
     {
         $mock = $mockTable[$mockKey]
-        $mock.Blocks = @($mock.Blocks | & $SafeCommands['Where-Object'] {$_.Scope -ne $currentScope})
 
-        if ($null -eq $parentScope)
+        $shouldRemoveMock = (-not $ExitTestCaseOnly) -and (ShouldRemoveMock -Mock $mock -ActivePesterState $pester)
+        if ($shouldRemoveMock)
         {
-            $null = Invoke-InMockScope -SessionState $mock.SessionState -ScriptBlock $scriptBlock -ArgumentList $mock.CommandName, $mock.FunctionScope, $mock.Alias
+            $null = Invoke-InMockScope -SessionState $mock.SessionState -ScriptBlock $removeMockStub -ArgumentList $mock.BootstrapFunctionName, $mock.Aliases
             $mockTable.Remove($mockKey)
         }
-        else
+        elseif ($mock.PesterState -eq $pester)
         {
+            if (-not $ExitTestCaseOnly)
+            {
+                $mock.Blocks = @($mock.Blocks | & $SafeCommands['Where-Object'] { $_.Scope -ne $pester.CurrentTestGroup })
+            }
+
+            $testGroups = @($pester.TestGroups)
+
+            $parentTestGroup = $null
+
+            if ($testGroups.Count -gt 1)
+            {
+                $parentTestGroup = $testGroups[-2]
+            }
+
             foreach ($historyEntry in $mock.CallHistory)
             {
-                if ($historyEntry.Scope -eq $currentScope) { $historyEntry.Scope = $parentScope }
+                if ($ExitTestCaseOnly)
+                {
+                    if ($historyEntry.Scope -eq $null) { $historyEntry.Scope = $pester.CurrentTestGroup }
+                }
+                elseif ($parentTestGroup)
+                {
+                    if ($historyEntry.Scope -eq $pester.CurrentTestGroup) { $historyEntry.Scope = $parentTestGroup }
+                }
             }
         }
     }
 }
 
+function ShouldRemoveMock($Mock, $ActivePesterState)
+{
+    if ($ActivePesterState -ne $mock.PesterState) { return $false }
+    if ($mock.Scope -eq $ActivePesterState.CurrentTestGroup) { return $true }
+
+    # These two should conditions should _probably_ never happen, because the above condition should
+    # catch it, but just in case:
+    if ($ActivePesterState.TestGroups.Count -eq 1) { return $true }
+    if ($ActivePesterState.TestGroups[-2].Hint -eq 'Root') { return $true }
+
+    return $false
+}
+
 function Validate-Command([string]$CommandName, [string]$ModuleName) {
     $module = $null
-    $origCommand = $null
-
-    $commandInfo = & $SafeCommands['New-Object'] psobject -Property @{ Command = $null; Scope = '' }
+    $command = $null
 
     $scriptBlock = {
-        $getContentCommand = & (Pester\SafeGetCommand) Get-Content -Module Microsoft.PowerShell.Management -CommandType Cmdlet
-        $newObjectCommand  = & (Pester\SafeGetCommand) New-Object  -Module Microsoft.PowerShell.Utility    -CommandType Cmdlet
-
         $command = $ExecutionContext.InvokeCommand.GetCommand($args[0], 'All')
         while ($null -ne $command -and $command.CommandType -eq [System.Management.Automation.CommandTypes]::Alias)
         {
             $command = $command.ResolvedCommand
         }
 
-        $properties = @{
-            Command = $command
-        }
-
-        if ($null -ne $command -and $command.CommandType -eq 'Function')
-        {
-            if ($ExecutionContext.InvokeProvider.Item.Exists("function:\global:$($command.Name)") -and
-                (& $getContentCommand "function:\global:$($command.Name)" -ErrorAction Stop) -eq $command.ScriptBlock)
-            {
-                $properties['Scope'] = 'global:'
-            }
-            elseif ($ExecutionContext.InvokeProvider.Item.Exists("function:\script:$($command.Name)") -and
-                    (& $getContentCommand "function:\script:$($command.Name)" -ErrorAction Stop) -eq $command.ScriptBlock)
-            {
-                $properties['Scope'] = 'script:'
-            }
-            else
-            {
-                $properties['Scope'] = ''
-            }
-        }
-
-        return & $newObjectCommand psobject -Property $properties
+        return $command
     }
 
     if ($ModuleName) {
         $module = Get-ScriptModule -ModuleName $ModuleName -ErrorAction Stop
-        $commandInfo = & $module $scriptBlock $CommandName
+        $command = & $module $scriptBlock $CommandName
     }
 
     $session = $pester.SessionState
 
-    if (-not $commandInfo.Command) {
+    if (-not $command) {
         Set-ScriptBlockScope -ScriptBlock $scriptBlock -SessionState $session
-        $commandInfo = & $scriptBlock $commandName
+        $command = & $scriptBlock $commandName
     }
 
-    if (-not $commandInfo.Command) {
+    if (-not $command) {
         throw ([System.Management.Automation.CommandNotFoundException] "Could not find Command $commandName")
     }
 
@@ -805,10 +855,20 @@ function Validate-Command([string]$CommandName, [string]$ModuleName) {
         $session = & $module { $ExecutionContext.SessionState }
     }
 
-    $hash = @{Command = $commandInfo.Command; Session = $session}
-    if ($commandInfo.Command.CommandType -eq 'Function')
+    $hash = @{Command = $command; Session = $session}
+
+    if ($command.CommandType -eq 'Function')
     {
-        $hash['Scope'] = $commandInfo.Scope
+        foreach ($mock in $mockTable.Values)
+        {
+            if ($command.Name -eq $mock.BootstrapFunctionName)
+            {
+                return @{
+                    Command = $mock.OriginalCommand
+                    Session = $mock.SessionState
+                }
+            }
+        }
     }
 
     return $hash
@@ -1017,47 +1077,50 @@ function ExecuteBlock
     )
 
     $Block.Verifiable = $false
-    $Mock.CallHistory += @{CommandName = "$ModuleName||$CommandName"; BoundParams = $BoundParameters; Args = $ArgumentList; Scope = $pester.Scope }
+
+    $scope = if ($pester.InTest) { $null } else { $pester.CurrentTestGroup }
+    $Mock.CallHistory += @{CommandName = "$ModuleName||$CommandName"; BoundParams = $BoundParameters; Args = $ArgumentList; Scope = $scope }
 
     $scriptBlock = {
         param (
             [Parameter(Mandatory = $true)]
             [scriptblock]
-            $ScriptBlock,
+            ${Script Block},
 
             [hashtable]
-            $BoundParameters = @{},
+            $___BoundParameters___ = @{},
 
             [object[]]
-            $ArgumentList = @(),
+            $___ArgumentList___ = @(),
 
             [System.Management.Automation.CommandMetadata]
-            $Metadata,
+            ${Meta data},
 
             [System.Management.Automation.SessionState]
-            $SessionState
+            ${Session State}
         )
 
         # This script block exists to hold variables without polluting the test script's current scope.
         # Dynamic parameters in functions, for some reason, only exist in $PSBoundParameters instead
-        # of being assigned a local variable the way static parameters do.  By calling Set-DynamicParameterValues,
+        # of being assigned a local variable the way static parameters do.  By calling Set-DynamicParameterVariable,
         # we create these variables for the caller's use in a Parameter Filter or within the mock itself, and
         # by doing it inside this temporary script block, those variables don't stick around longer than they
         # should.
 
-        # Because Set-DynamicParameterVariables might potentially overwrite our $ScriptBlock, $BoundParameters and/or $ArgumentList variables,
-        # we'll stash them in names unlikely to be overwritten.
-
-        $___ScriptBlock___ = $ScriptBlock
-        $___BoundParameters___ = $BoundParameters
-        $___ArgumentList___ = $ArgumentList
-
-        Set-DynamicParameterVariables -SessionState $SessionState -Parameters $BoundParameters -Metadata $Metadata
-        & $___ScriptBlock___ @___BoundParameters___ @___ArgumentList___
+        Set-DynamicParameterVariable -SessionState ${Session State} -Parameters $___BoundParameters___ -Metadata ${Meta data}
+        & ${Script Block} @___BoundParameters___ @___ArgumentList___
     }
 
     Set-ScriptBlockScope -ScriptBlock $scriptBlock -SessionState $mock.SessionState
-    & $scriptBlock -ScriptBlock $block.Mock -ArgumentList $ArgumentList -BoundParameters $BoundParameters -Metadata $mock.Metadata -SessionState $mock.SessionState
+    $splat = @{
+        'Script Block' = $block.Mock
+        '___ArgumentList___' = $ArgumentList
+        '___BoundParameters___' = $BoundParameters
+        'Meta data' = $mock.Metadata
+        'Session State' = $mock.SessionState
+    }
+
+    & $scriptBlock @splat
 }
 
 function Invoke-InMockScope
@@ -1131,7 +1194,7 @@ function Get-ParamBlockFromBoundParameters
         [System.Management.Automation.CommandMetadata] $Metadata
     )
 
-    $params = foreach ($paramName in $BoundParameters.Keys)
+    $params = foreach ($paramName in $BoundParameters.get_Keys())
     {
         if (IsCommonParameter -Name $paramName -Metadata $Metadata)
         {
@@ -1173,17 +1236,7 @@ function IsCommonParameter
     return $false
 }
 
-function Get-ScopeForMock
-{
-    param ($PesterState)
-
-    $scope = $PesterState.Scope
-    if ($scope -eq 'It') { $scope = $PesterState.ParentScope }
-
-    return $scope
-}
-
-function Set-DynamicParameterVariables
+function Set-DynamicParameterVariable
 {
     <#
         .SYNOPSIS
@@ -1241,18 +1294,21 @@ function Get-DynamicParamBlock
     }
     else
     {
-        if ($null -ne $ScriptBlock.Ast.Body.DynamicParamBlock)
+        If ( $ScriptBlock.AST.psobject.Properties.Name -match "Body")
         {
-            $statements = $ScriptBlock.Ast.Body.DynamicParamBlock.Statements |
-                          & $SafeCommands['Select-Object'] -ExpandProperty Extent |
-                          & $SafeCommands['Select-Object'] -ExpandProperty Text
+            if ($null -ne $ScriptBlock.Ast.Body.DynamicParamBlock)
+            {
+                $statements = $ScriptBlock.Ast.Body.DynamicParamBlock.Statements |
+                            & $SafeCommands['Select-Object'] -ExpandProperty Extent |
+                            & $SafeCommands['Select-Object'] -ExpandProperty Text
 
-            return $statements -join "`r`n"
+                return $statements -join "$([System.Environment]::NewLine)"
+            }
         }
     }
 }
 
-function Get-MockDynamicParameters
+function Get-MockDynamicParameter
 {
     <#
         .SYNOPSIS
@@ -1270,7 +1326,7 @@ function Get-MockDynamicParameters
         [Parameter(ParameterSetName = 'Function')]
         [string] $ModuleName,
 
-        [hashtable] $Parameters,
+        [System.Collections.IDictionary] $Parameters,
 
         [object] $Cmdlet
     )
@@ -1296,10 +1352,18 @@ function Get-DynamicParametersForCmdlet
         [Parameter(Mandatory = $true)]
         [string] $CmdletName,
 
+        [ValidateScript({
+            if ($PSVersionTable.PSVersion.Major -ge 3 -and
+                $null -ne $_ -and
+                $_.GetType().FullName -ne 'System.Management.Automation.PSBoundParametersDictionary')
+            {
+                throw 'The -Parameters argument must be a PSBoundParametersDictionary object ($PSBoundParameters).'
+            }
+
+            return $true
+        })]
         [System.Collections.IDictionary] $Parameters
     )
-
-    if ($null -eq $Parameters) { $Parameters = @{} }
 
     try
     {
@@ -1315,45 +1379,72 @@ function Get-DynamicParametersForCmdlet
         $PSCmdlet.ThrowTerminatingError($_)
     }
 
-    $cmdlet = & $SafeCommands['New-Object'] $command.ImplementingType.FullName
-    if ($cmdlet -isnot [System.Management.Automation.IDynamicParameters])
+    if ($null -eq $command.ImplementingType.GetInterface('IDynamicParameters', $true))
     {
         return
     }
 
-    $flags = [System.Reflection.BindingFlags]'Instance, Nonpublic'
-    $context = $ExecutionContext.GetType().GetField('_context', $flags).GetValue($ExecutionContext)
-    [System.Management.Automation.Cmdlet].GetProperty('Context', $flags).SetValue($cmdlet, $context, $null)
-
-    foreach ($keyValuePair in $Parameters.GetEnumerator())
+    if ('5.0.10586.122' -lt $PSVersionTable.PSVersion)
     {
-        $property = $cmdlet.GetType().GetProperty($keyValuePair.Key)
-        if ($null -eq $property -or -not $property.CanWrite) { continue }
+        # Older version of PS required Reflection to do this.  It has run into problems on occasion with certain cmdlets,
+        # such as ActiveDirectory and AzureRM, so we'll take advantage of the newer PSv5 engine features if at all possible.
 
-        $isParameter = [bool]($property.GetCustomAttributes([System.Management.Automation.ParameterAttribute], $true))
-        if (-not $isParameter) { continue }
+        if ($null -eq $Parameters) { $paramsArg = @() } else { $paramsArg = @($Parameters) }
 
-        $property.SetValue($cmdlet, $keyValuePair.Value, $null)
+        $command = $ExecutionContext.InvokeCommand.GetCommand($CmdletName, [System.Management.Automation.CommandTypes]::Cmdlet, $paramsArg)
+        $paramDictionary = [System.Management.Automation.RuntimeDefinedParameterDictionary]::new()
+
+        foreach ($param in $command.Parameters.Values)
+        {
+            if (-not $param.IsDynamic) { continue }
+            if ($Parameters.ContainsKey($param.Name)) { continue }
+
+            $dynParam = [System.Management.Automation.RuntimeDefinedParameter]::new($param.Name, $param.ParameterType, $param.Attributes)
+            $paramDictionary.Add($param.Name, $dynParam)
+        }
+
+        return $paramDictionary
     }
-
-    try
+    else
     {
-        # This unary comma is important in some cases.  On Windows 7 systems, the ActiveDirectory module cmdlets
-        # return objects from this method which implement IEnumerable for some reason, and even cause PowerShell
-        # to throw an exception when it tries to cast the object to that interface.
+        if ($null -eq $Parameters) { $Parameters = @{} }
 
-        # We avoid that problem by wrapping the result of GetDynamicParameters() in a one-element array with the
-        # unary comma.  PowerShell enumerates that array instead of trying to enumerate the goofy object, and
-        # everyone's happy.
+        $cmdlet = & $SafeCommands['New-Object'] $command.ImplementingType.FullName
 
-        # Love the comma.  Don't delete it.  We don't have a test for this yet, unless we can get the AD module
-        # on a Server 2008 R2 build server, or until we write some C# code to reproduce its goofy behavior.
+        $flags = [System.Reflection.BindingFlags]'Instance, Nonpublic'
+        $context = $ExecutionContext.GetType().GetField('_context', $flags).GetValue($ExecutionContext)
+        [System.Management.Automation.Cmdlet].GetProperty('Context', $flags).SetValue($cmdlet, $context, $null)
 
-        ,$cmdlet.GetDynamicParameters()
-    }
-    catch [System.NotImplementedException]
-    {
-        # Some cmdlets implement IDynamicParameters but then throw a NotImplementedException.  I have no idea why.  Ignore them.
+        foreach ($keyValuePair in $Parameters.GetEnumerator())
+        {
+            $property = $cmdlet.GetType().GetProperty($keyValuePair.Key)
+            if ($null -eq $property -or -not $property.CanWrite) { continue }
+
+            $isParameter = [bool]($property.GetCustomAttributes([System.Management.Automation.ParameterAttribute], $true))
+            if (-not $isParameter) { continue }
+
+            $property.SetValue($cmdlet, $keyValuePair.Value, $null)
+        }
+
+        try
+        {
+            # This unary comma is important in some cases.  On Windows 7 systems, the ActiveDirectory module cmdlets
+            # return objects from this method which implement IEnumerable for some reason, and even cause PowerShell
+            # to throw an exception when it tries to cast the object to that interface.
+
+            # We avoid that problem by wrapping the result of GetDynamicParameters() in a one-element array with the
+            # unary comma.  PowerShell enumerates that array instead of trying to enumerate the goofy object, and
+            # everyone's happy.
+
+            # Love the comma.  Don't delete it.  We don't have a test for this yet, unless we can get the AD module
+            # on a Server 2008 R2 build server, or until we write some C# code to reproduce its goofy behavior.
+
+            ,$cmdlet.GetDynamicParameters()
+        }
+        catch [System.NotImplementedException]
+        {
+            # Some cmdlets implement IDynamicParameters but then throw a NotImplementedException.  I have no idea why.  Ignore them.
+        }
     }
 }
 
@@ -1399,6 +1490,7 @@ function Test-IsClosure
     )
 
     $sessionStateInternal = Get-ScriptBlockScope -ScriptBlock $ScriptBlock
+    if ($null -eq $sessionStateInternal) { return $false }
 
     $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
     $module = $sessionStateInternal.GetType().GetProperty('Module', $flags).GetValue($sessionStateInternal, $null)
@@ -1408,4 +1500,23 @@ function Test-IsClosure
         $module.Name -match '^__DynamicModule_([a-f\d-]+)$' -and
         $null -ne ($matches[1] -as [guid])
     )
+}
+
+function Remove-MockFunctionsAndAliases {
+    # when a test is terminated (e.g. by stopping at a breakpoint and then stoping the execution of the script)
+    # the aliases and bootstrap functions for the currently mocked functions will remain in place
+    # Then on subsequent runs the bootstrap function will be picked up instead of the real command,
+    # because there is still an alias associated with it, and the test will fail.
+    # So before putting Pester state in place we should make sure that all Pester mocks are gone
+    # by deleting every alias pointing to a function that starts with PesterMock_. Then we also delete the
+    # bootstrap function.
+    foreach ($alias in (& $script:SafeCommands['Get-Alias'] -Definition "PesterMock_*"))
+    {
+        & $script:SafeCommands['Remove-Item'] "alias:/$($alias.Name)"
+    }
+
+    foreach ($bootstrapFunction in (& $script:SafeCommands['Get-Command'] -Name "PesterMock_*"))
+    {
+        & $script:SafeCommands['Remove-Item'] "function:/$($bootstrapFunction.Name)"
+    }
 }

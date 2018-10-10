@@ -1,5 +1,168 @@
-## Unreleased
+## 4.4.2 (October 3, 2018)
+ - Remove single quotes when expanding strings in test name [GH-1090]
+ - Get environment info on non-windows platforms [GH-1105]
+
+## 4.4.1 (September 20, 2018)
+ - Fix describe tags [GH-1098]
+ - Capitalize name and test parameters [GH-1080]
+
+## 4.4.0 (July 20, 2018)
+ - Run all tests in strict mode [GH-1041]
+ - Fix non-existent module check [GH-1040]
+ - Fix testdrive silent fails [GH-1059]
+ - Fix tags filter warning [GH-1073]
+ - Remove splitting on tags [GH-1074]
+ - Add wildcards for tags [GH-1038]
+ - Fix ps error in Pester tests on Linux [GH-1037]
+ - Fix dynamic module clean up after mock tests [GH-1036]
+ - Fix mocks clean up on start [GH-1035]
+ - Fix lessthan greaterthan assertion messages [GH-1034]
+ - Fix saving result files to the path provided as a PSDrive [GH-1033]
+ - Fix style rules for Pester dependencies  [GH-1031]
+ - Add error message to fail in Should -Not -Throw [GH-1027]
+ - Add FileContentMatchMultiline back among assertions. [GH-1023]
+ - Fix FileContentMatchMultiline [GH-1024]
+ - Fix file count in JaCoCo report [GH-1013]
+ - Fix issue template by using the -ListAvailable [GH-1001]
+ - Fix Add-AssertionOperator example [GH-1016]
+ - Fix spaces in DescribeImpl [GH-1019]
+ - Fix -FileContentMatch example [GH-1020]
+
+## 4.3.1 (February 20, 2018)
+  - Fix missing dependencies in packages
+  
+## 4.3.0 (February 20, 2018)
+  - Add tests for help [GH-997]
+  - Update output in assertions [GH-996]
+  - Fix stack trace output in assertions [GH-992]
+  - Add examples for gherkin [GH-994] [GH-995]
+
+## 4.2.0 (February 18, 2018)
+  - Update should documentation [GH-990]
+  - Add tags PSEdition_Core, PSEdition_Desktop [GH-978]
+  - Add Get-ScriptModule error message with link to wiki [GH-945]
+  - Fix Write-PesterStart [GH-964]
+  - Fix AfterAll synopsis [GH-975]
+  - Fix detection of empty tests [GH-835]
+  - Add -Because parameters to all assertions [GH-959]
+  - Add -BeLessOrEqual and -BeGreaterOrEqual
+  - Add -Contain (that operates on arrays)
+  - Add -BeLikeExactly
+  - Add -HaveType alias to -BeOfType
+  - Fix assertion messages in -BeOfType
+  - Throw argument exception when -BeOfType is given type that is not loaded
+  - Add -PassThru to -Throw to get the exception when some is thrown and passes the filters
+  - Add -BeTrue to test for truthy values
+  - Add -BeFalse to test for falsy values
+  - Add -HaveCount to count stuff in collections
+  - Load dependencies optionally, because they are not part of the package build
+  - Should Throw filters on exception type [GH-954]
+
+## 4.1.1 (December 09, 2017)
+  - Fix deployment scripts and package on choco and nuget
+  
+## 4.1.0 (November 15, 2017)
+  - Help for the Assert-VerifiableMocks function added [GH-883]
+  - Add-AssertionOperator can be called multiple times for identical parameters without errors.  [GH-893]
+  - Update Pester to work on PowerShell Core at Windows, Linux, macOS [GH-925]
+  - Throw on Assert-VerifiableMocks [GH-918]
+  - Update a syntax of Should for the Pester v4 notation [GH-903]
+  - Syntax for the Should operator updated in Pester tests itself, an about_* documentation, examples [GH-910]
+  - Remove progress to make execution faster and fix linux formatting [GH-938]
+  - Invoke-Pester -Strict fails with internal pester error [GH-886]
+    due to the prefered syntax change introduced in Pester v4 [GH-903]
+  - Fix Gherkin for Linux [GH-937] and PS2 [GH-942]
+
+## 4.0.8 (September 15, 2017)
+  - Add Assert-VerifiableMocks that throws [GH-881]
+
+## 4.0.7 (September 13, 2017)
+  - Use https in manifest and link to release notes [GH-871]
+  - Make commands singular [GH-860]
+  - Update help of Gherkin-related functions [GH-861]
+  - Rename Contain assertions to FileContentMatch [GH-859]
+  - Remove CommandUsed parameter from Describe [GH-858]
+  - Add new readme [GH-837]
+  - Add CodeCoverageOutputFileFormat parameter [GH-850]
+  - Update help for New-PesterOption [GH-847]
+  - Extend style rules to psd1 files [GH-842]
+  - Update help of New-MockObject and Context [GH-841]
+  - Update help of Invoke-Gherking [GH-839]
+  - Fix exception propagating outside of describe/context when AfterAll fails [GH-836]
+  - Fix foreground for inconclusive tests results [GH-829]
+
+## 4.0.6-rc (August 17, 2017)
+  - Add limit for cyclic arrays on Should -Be [GH-824]
+  - Fix infinite recursion on Should -Be [GH-818]
+  - Fix output when passing in hashtables [GH-816]
+  - Fix -Verifiable parameter on Assert-VerifiableMocks [GH-786]
+  - Add Set-TestInconclusive documentation to It [GH-778]
+  - Add script analyzer tests and more internal fixes
+
+## 4.0.5-rc (July 25, 2017)
+  - Publish Add-AssertionOperator [GH-765]
+
+## 4.0.4-rc (July 14, 2017)
+  - Fix BeNullOrEmpty for empty hashtable [GH-760]
+  - Fix style rules [GH-691]
+  - Fix mock scope error message [GH-759]
+  - Fix mocking in consecutive scopes [GH-747]
+  - Add JaCoCo code coverage output [GH-782]
+
+## 4.0.3-rc (March 22, 2017)
+  - Fix context and describe in test results [GH-755]
+  - Fix mocking functions in two consequitive contexts [GH-744]
+  - Fix import localized data on non en-US systems [GH-711]
+  - Fix IncludeVSCodeMarker [GH-726]
+  - Fix should be when working with distinct types [GH-704]
+  - Add commas to output [GH-690]
+  - Updated help and other small fixes
+
+## 4.0.2-rc (January 18, 2017)
+  - Fix build script that builds the package for PowerShell gallery to include lib
+
+## 4.0.1-rc (January 18, 2017)
+  - Pushing 4.0.0-rc again, because the PowerShell gallery does not allow the same version to be pushed again
+
+## 4.0.0-rc2 (January 18, 2017)
+  - Fix nuget package to include gherkin library
+
+## 4.0.0-rc1 (January 18, 2017)
+  - Add Gherkin support
+  - Add new should syntax to Should -Not -Be 1 to enable more extensibility
+  - Add more unified output
+  - Add colors to summary
+  - (experimental) Add nested Describe and Context
+
+  - Deprecated: Quiet parameter is depracated, use -Show none
+  - Deprecated: New-TestDriveItem as most of the people do not even know it exists
+  - Gone: OutputXml is gone, it was deprecated before, use -OutputFormat and -OutputFile
+
+## 3.4.6 (January 13, 2017)
+  - Fix bug with -Show parameter on PowerShell v4 and older [GH-677]
+  - Add commas to test run summary [GH-676]
+
+## 3.4.5 (January 12, 2017)
+  - Add -Show parameter to filter on-screen output [GH-647]
+  - Add BeIn assertion to assert an item is part of an array [GH-646]
+  - Fix test drive to work on PSCore [GH-643]
+ 
+## 3.4.4 (November 12, 2016)
+  - Add New-MockObject function that creates empty objects for almost any .NET class [GH-635]
+
+## 3.4.3 (August 25, 2016)
+  - Fixed mocking for certain cmdlets containing dynamic parameters in PowerShell 5.1.  [GH-599]
+
+## 3.4.2 (August 2, 2016)
+  - Bug fix when multiple cmdlets with the same name exist in PowerShell 5.1.  [GH-588]
+
+## 3.4.1 (July 22, 2016)
   - Updated code to use Get-CimInstance if possible, then Get-WmiObject, for Nano compatibility.  [GH-484]
+  - Fixed failure message output of Should BeLike / BeLikeExactly.  [GH-497]
+  - Added some missing information to about_Should help. [GH-519]
+  - Made -OutputFormat parameter optional, defaulting to NUnitXml. [GH-503]
+  - Fix error message of Should Throw when null input is provided [GH-521]
+  - Fix mocking bug on functions that contain certain parameter names (Metadata, etc).  [GH-583]
 
 ## 3.4.0 (February 29, 2016)
   - Bug fix for PSv2 when no matching scripts are found by Invoke-Pester.  [GH-441]
@@ -51,7 +214,7 @@
   - Added -ExclusiveFilter parameter to Assert-MockCalled.  Works like -ParameterFilter, except there also must not be any calls to the mocked command which do _not_ match the filter.
   - Added the "bin" folder to the PATH environment variable when installing from Chocolatey.  Also removed the hard-coded -OutputXml and -Strict parameters from this file; only -EnableExit is always used from the bat file now.  [GH-281]
   - PassThru object (when used in conjunction with -CodeCoverage) now includes information about Hit commands in addition to Missed commands.  [GH-341]
-  - Improvements to support for mocking advanced fynctions with dynamic parameters.  [GH-346]
+  - Improvements to support for mocking advanced functions with dynamic parameters.  [GH-346]
   - Fix for PowerShell v2 bug when mocking commands that have an -ArgumentList parameter with validation attributes.  [GH-354]
   - Fixed stack trace output when the call to Should is in a file other than the file that contains the It block. [GH-358]
 
@@ -197,7 +360,7 @@
   - Fixed issues when mocking Out-File [GH-71]
   - Exposing TestDrive with Get-TestDriveItem [GH-70]
   - Fixed bug where mocking Remove-Item caused cleanup to break [GH-68]
-  - Added -Passthu to Setup to obtain file system object references [GH-69]
+  - Added -Passthru to Setup to obtain file system object references [GH-69]
   - Can assert on exception messages from Throw assertions [GH-58]
   - Fixed assertions on empty functions [GH-50]
   - Fixed New-Fixture so it creates proper syntax in tests [GH-49]

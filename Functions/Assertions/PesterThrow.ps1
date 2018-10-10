@@ -1,53 +1,144 @@
+function PesterThrow([scriptblock] $ActualValue, $ExpectedMessage, $ErrorId, [type]$ExceptionType, [switch] $Negate, [string] $Because, [switch] $PassThru) {
+    $actualExceptionMessage = ""
+    $actualExceptionWasThrown = $false
+    $actualError = $null
+    $actualException = $null
+    $actualExceptionLine = $null
 
-$ActualExceptionMessage = ""
-$ActualExceptionWasThrown = $false
-
-# because this is a script block, the user will have to
-# wrap the code they want to assert on in { }
-function PesterThrow([scriptblock] $script, $expectedErrorMessage) {
-    $Script:ActualExceptionMessage = ""
-    $Script:ActualExceptionWasThrown = $false
+    if ($null -eq $ActualValue) {
+        throw (New-Object -TypeName ArgumentNullException -ArgumentList "ActualValue","Scriptblock not found. Input to 'Throw' and 'Not Throw' must be enclosed in curly braces.")
+    }
 
     try {
-        # Redirect to $null so script output does not enter the pipeline
-        & $script > $null
+        do {
+            $null = & $ActualValue
+        } until ($true)
     } catch {
-        $Script:ActualExceptionWasThrown = $true
-        $Script:ActualExceptionMessage = $_.Exception.Message
-        $Script:ActualExceptionLine = Get-ExceptionLineInfo $_.InvocationInfo
+        $actualExceptionWasThrown = $true
+        $actualError = $_
+        $actualException = $_.Exception
+        $actualExceptionMessage = $_.Exception.Message
+        $actualErrorId = $_.FullyQualifiedErrorId
+        $actualExceptionLine = (Get-ExceptionLineInfo $_.InvocationInfo) -replace [System.Environment]::NewLine,"$([System.Environment]::NewLine)    "
     }
 
-    if ($ActualExceptionWasThrown) {
-        return Get-DoMessagesMatch $ActualExceptionMessage $expectedErrorMessage
+    [bool] $succeeded = $false
+
+    if ($Negate) {
+        # this is for Should -Not -Throw. Once *any* exception was thrown we should fail the assertion
+        # there is no point in filtering the exception, because there should be none
+        $succeeded = -not $actualExceptionWasThrown
+        if (-not $succeeded) {
+            $failureMessage = "Expected no exception to be thrown,$(Format-Because $Because) but an exception `"$actualExceptionMessage`" was thrown $actualExceptionLine."
+            return New-Object psobject -Property @{
+                Succeeded      = $succeeded
+                FailureMessage = $failureMessage
+            }
+        } else {
+            return New-Object psobject -Property @{
+                Succeeded      = $true
+            }
+        }
     }
-    return $false
+
+    # the rest is for Should -Throw, we must fail the assertion when no exception is thrown
+    # or when the exception does not match our filter
+
+    function Join-And ($Items, $Threshold=2) {
+
+        if ($null -eq $items -or $items.count -lt $Threshold)
+        {
+            $items -join ', '
+        }
+        else
+        {
+            $c = $items.count
+            ($items[0..($c-2)] -join ', ') + ' and ' + $items[-1]
+        }
+    }
+
+    function Add-SpaceToNonEmptyString ([string]$Value) {
+        if ($Value)
+        {
+            " $Value"
+        }
+    }
+
+    $buts = @()
+    $filters = @()
+
+    $filterOnExceptionType = $null -ne $ExceptionType
+    if ($filterOnExceptionType) {
+        $filters += "with type $(Format-Nicely $ExceptionType)"
+
+        if ($actualExceptionWasThrown -and $actualException -isnot $ExceptionType) {
+            $buts += "the exception type was $(Format-Nicely ($actualException.GetType()))"
+        }
+    }
+
+    $filterOnMessage = -not [string]::IsNullOrEmpty($ExpectedMessage -replace "\s")
+    if ($filterOnMessage) {
+        $filters += "with message $(Format-Nicely $ExpectedMessage)"
+        if ($actualExceptionWasThrown -and (-not (Get-DoValuesMatch $actualExceptionMessage $ExpectedMessage))) {
+            $buts += "the message was $(Format-Nicely $actualExceptionMessage)"
+        }
+    }
+
+    $filterOnId = -not [string]::IsNullOrEmpty($ErrorId -replace "\s")
+    if ($filterOnId) {
+        $filters += "with FullyQualifiedErrorId $(Format-Nicely $ErrorId)"
+        if ($actualExceptionWasThrown -and (-not (Get-DoValuesMatch $actualErrorId $ErrorId))) {
+            $buts += "the FullyQualifiedErrorId was $(Format-Nicely $actualErrorId)"
+        }
+    }
+
+    if (-not $actualExceptionWasThrown)
+    {
+        $buts += "no exception was thrown"
+    }
+
+    if ($buts.Count -ne 0) {
+        $filter = Add-SpaceToNonEmptyString ( Join-And $filters -Threshold 3 )
+        $but = Join-And $buts
+        $failureMessage = "Expected an exception,$filter to be thrown,$(Format-Because $Because) but $but. $actualExceptionLine".Trim()
+
+        return New-Object psobject -Property @{
+            Succeeded      = $false
+            FailureMessage = $failureMessage
+        }
+    }
+
+    $result = New-Object psobject -Property @{
+        Succeeded      = $true
+    }
+
+    if ($PassThru) {
+        $result | Add-Member -MemberType NoteProperty -Name 'Data' -Value $actualError
+    }
+
+    return $result
 }
 
-function Get-DoMessagesMatch($value, $expected) {
-    if ($expected -eq "") { return $false }
-    return $value.Contains($expected)
+function Get-DoValuesMatch($ActualValue, $ExpectedValue) {
+    #user did not specify any message filter, so any message matches
+    if ($null -eq $ExpectedValue ) { return $true }
+
+    return $ActualValue.ToString().IndexOf($ExpectedValue, [System.StringComparison]::InvariantCultureIgnoreCase) -ge 0
 }
 
 function Get-ExceptionLineInfo($info) {
     # $info.PositionMessage has a leading blank line that we need to account for in PowerShell 2.0
-    $positionMessage = $info.PositionMessage -split '\r?\n' -match '\S' -join "`r`n"
+    $positionMessage = $info.PositionMessage -split '\r?\n' -match '\S' -join [System.Environment]::NewLine
     return ($positionMessage -replace "^At ","from ")
 }
 
-function PesterThrowFailureMessage($value, $expected) {
-    if ($expected) {
-        return "Expected: the expression to throw an exception with message {{{0}}}, an exception was {2}raised, message was {{{1}}}`n    {3}" -f
-               $expected, $ActualExceptionMessage,(@{$true="";$false="not "}[$ActualExceptionWasThrown]),($ActualExceptionLine  -replace "`n","`n    ")
-    } else {
-      return "Expected: the expression to throw an exception"
-    }
+function PesterThrowFailureMessage {
+    # to make the should tests happy, for now
 }
 
-function NotPesterThrowFailureMessage($value, $expected) {
-    if ($expected) {
-        return "Expected: the expression not to throw an exception with message {{{0}}}, an exception was {2}raised, message was {{{1}}}`n    {3}" -f
-               $expected, $ActualExceptionMessage,(@{$true="";$false="not "}[$ActualExceptionWasThrown]),($ActualExceptionLine  -replace "`n","`n    ")
-    } else {
-        return "Expected: the expression not to throw an exception. Message was {{{0}}}`n    {1}" -f $ActualExceptionMessage,($ActualExceptionLine  -replace "`n","`n    ")
-    }
+function NotPesterThrowFailureMessage {
+    # to make the should tests happy, for now
 }
+
+Add-AssertionOperator -Name Throw `
+                      -Test $function:PesterThrow

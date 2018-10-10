@@ -1,23 +1,31 @@
 #
-function New-TestDrive ([Switch]$PassThru) {
-    $Path = New-RandomTempDirectory
-    $DriveName = "TestDrive"
-
-    if (-not (& $SafeCommands['Test-Path'] -Path $Path))
+function New-TestDrive ([Switch]$PassThru, [string] $Path) {
+    if ($Path -notmatch '\S')
     {
-        & $SafeCommands['New-Item'] -ItemType Container -Path $Path | & $SafeCommands['Out-Null']
+        $directory = New-RandomTempDirectory
     }
+    else
+    {
+        if (-not (& $SafeCommands['Test-Path'] -Path $Path))
+        {
+            $null = & $SafeCommands['New-Item'] -ItemType Container -Path $Path
+        }
+
+        $directory = & $SafeCommands['Get-Item'] $Path
+    }
+
+    $DriveName = "TestDrive"
 
     #setup the test drive
     if ( -not (& $SafeCommands['Test-Path'] "${DriveName}:\") )
     {
-        & $SafeCommands['New-PSDrive'] -Name $DriveName -PSProvider FileSystem -Root $Path -Scope Global -Description "Pester test drive" | & $SafeCommands['Out-Null']
+        $null = & $SafeCommands['New-PSDrive'] -Name $DriveName -PSProvider FileSystem -Root $directory -Scope Global -Description "Pester test drive"
     }
 
     #publish the global TestDrive variable used in few places within the module
-    if (-not (& $SafeCommands['Test-Path'] "Variable:Global:DriveName"))
+    if (-not (& $SafeCommands['Test-Path'] "Variable:Global:$DriveName"))
     {
-        & $SafeCommands['New-Variable'] -Name $DriveName -Scope Global -Value $Path
+        & $SafeCommands['New-Variable'] -Name $DriveName -Scope Global -Value $directory
     }
 
     if ( $PassThru ) { & $SafeCommands['Get-PSDrive'] -Name $DriveName }
@@ -39,15 +47,47 @@ function Clear-TestDrive ([String[]]$Exclude) {
 function New-RandomTempDirectory {
     do
     {
-        $Path = & $SafeCommands['Join-Path'] -Path $env:TEMP -ChildPath ([Guid]::NewGuid())
+        $tempPath = Get-TempDirectory
+        $Path = & $SafeCommands['Join-Path'] -Path $tempPath -ChildPath ([Guid]::NewGuid())
     } until (-not (& $SafeCommands['Test-Path'] -Path $Path ))
 
     & $SafeCommands['New-Item'] -ItemType Container -Path $Path
 }
 
 function Get-TestDriveItem {
+<#
+    .SYNOPSIS
+    The Get-TestDriveItem cmdlet gets the item in Pester test drive.
+
+    .DESCRIPTION
+    The Get-TestDriveItem cmdlet gets the item in Pester test drive. It does not
+    get the contents of the item at the location unless you use a wildcard
+    character (*) to request all the contents of the item.
+
+    The function Get-TestDriveItem is deprecated since Pester v. 4.0
+    and will be deleted in the next major version of Pester.
+
+    .PARAMETER Path
+    Specifies the path to an item. The path need to be relative to TestDrive:.
+    This cmdlet gets the item at the specified location. Wildcards are permitted.
+    This parameter is required, but the parameter name ("Path") is optional.
+
+    .EXAMPLE
+
+    Get-TestDriveItem MyTestFolder\MyTestFile.txt
+
+    This command returns the file MyTestFile.txt located in the folder MyTestFolder
+    what is located under TestDrive.
+
+    .LINK
+    https://github.com/pester/Pester/wiki/TestDrive
+    about_TestDrive
+#>
+
     #moved here from Pester.psm1
-    param( [string]$Path )
+    param ([string]$Path)
+
+    & $SafeCommands['Write-Warning'] -Message "The function Get-TestDriveItem is deprecated since Pester 4.0.0 and will be removed from Pester 5.0.0."
 
     Assert-DescribeInProgress -CommandName Get-TestDriveItem
     & $SafeCommands['Get-Item'] $(& $SafeCommands['Join-Path'] $TestDrive $Path )
@@ -76,7 +116,7 @@ function Remove-TestDrive {
 
     if ( $Drive )
     {
-        $Drive | & $SafeCommands['Remove-PSDrive'] -Force -ErrorAction $script:IgnoreErrorPreference
+        $Drive | & $SafeCommands['Remove-PSDrive'] -Force #This should fail explicitly as it impacts future pester runs
     }
 
     if (& $SafeCommands['Test-Path'] -Path $Path)
@@ -90,7 +130,10 @@ function Remove-TestDrive {
 }
 
 function Setup {
-    #included for backwards compatibility
+    <#
+        .SYNOPSIS
+        This command is included in the Pester Mocking framework for backwards compatibility.  You do not need to call it directly.
+    #>
     param(
     [switch]$Dir,
     [switch]$File,

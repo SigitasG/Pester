@@ -15,8 +15,11 @@ the expectation of the test.
 In addition to using your own logic to test expectations and throw exceptions,
 you may also use Pester's Should command to perform assertions in plain language.
 
+You can intentionally mark It block result as inconclusive by using Set-TestInconclusive
+command as the first tested statement in the It block.
+
 .PARAMETER Name
-An expressive phsae describing the expected test outcome.
+An expressive phrase describing the expected test outcome.
 
 .PARAMETER Test
 The script block that should throw an exception if the
@@ -51,22 +54,22 @@ function Add-Numbers($a, $b) {
 Describe "Add-Numbers" {
     It "adds positive numbers" {
         $sum = Add-Numbers 2 3
-        $sum | Should Be 5
+        $sum | Should -Be 5
     }
 
     It "adds negative numbers" {
         $sum = Add-Numbers (-2) (-2)
-        $sum | Should Be (-4)
+        $sum | Should -Be (-4)
     }
 
     It "adds one negative number to positive number" {
         $sum = Add-Numbers (-2) 2
-        $sum | Should Be 0
+        $sum | Should -Be 0
     }
 
     It "concatenates strings if given strings" {
         $sum = Add-Numbers two three
-        $sum | Should Be "twothree"
+        $sum | Should -Be "twothree"
     }
 }
 
@@ -87,22 +90,23 @@ Describe "Add-Numbers" {
         param ($a, $b, $expectedResult)
 
         $sum = Add-Numbers $a $b
-        $sum | Should Be $expectedResult
+        $sum | Should -Be $expectedResult
     }
 }
 
 .LINK
 Describe
 Context
+Set-TestInconclusive
 about_should
 #>
     [CmdletBinding(DefaultParameterSetName = 'Normal')]
     param(
         [Parameter(Mandatory = $true, Position = 0)]
-        [string]$name,
+        [string] $Name,
 
         [Parameter(Position = 1)]
-        [ScriptBlock] $test = {},
+        [ScriptBlock] $Test = {},
 
         [System.Collections.IDictionary[]] $TestCases,
 
@@ -122,9 +126,9 @@ function ItImpl
     [CmdletBinding(DefaultParameterSetName = 'Normal')]
     param(
         [Parameter(Mandatory = $true, Position=0)]
-        [string]$name,
+        [string]$Name,
         [Parameter(Position = 1)]
-        [ScriptBlock] $test,
+        [ScriptBlock] $Test,
         [System.Collections.IDictionary[]] $TestCases,
         [Parameter(ParameterSetName = 'Pending')]
         [Switch] $Pending,
@@ -150,14 +154,28 @@ function ItImpl
     }
 
     #the function is called with Pending or Skipped set the script block if needed
-    if ($null -eq $test) { $test = {} }
+    if ($null -eq $Test) { $Test = {} }
 
     #mark empty Its as Pending
-    #[String]::IsNullOrWhitespace is not available in .NET version used with PowerShell 2
-    if ($PSCmdlet.ParameterSetName -eq 'Normal' -and
-       [String]::IsNullOrEmpty((Remove-Comments $test.ToString()) -replace "\s"))
+    if ($PSVersionTable.PSVersion.Major -le 2 -and
+        $PSCmdlet.ParameterSetName -eq 'Normal' -and
+        [String]::IsNullOrEmpty((Remove-Comments $Test.ToString()) -replace "\s"))
     {
         $Pending = $true
+    }
+    elseIf ($PSVersionTable.PSVersion.Major -gt 2)
+    {
+        #[String]::IsNullOrWhitespace is not available in .NET version used with PowerShell 2
+        # AST is not available also
+        $testIsEmpty =
+            [String]::IsNullOrEmpty($Test.Ast.BeginBlock.Statements) -and
+            [String]::IsNullOrEmpty($Test.Ast.ProcessBlock.Statements) -and
+            [String]::IsNullOrEmpty($Test.Ast.EndBlock.Statements)
+
+        if ($PSCmdlet.ParameterSetName -eq 'Normal' -and $testIsEmpty)
+        {
+            $Pending = $true
+        }
     }
 
     $pendingSkip = @{}
@@ -175,11 +193,21 @@ function ItImpl
     {
         foreach ($testCase in $TestCases)
         {
-            $expandedName = [regex]::Replace($name, '<([^>]+)>', {
+            $expandedName = [regex]::Replace($Name, '<([^>]+)>', {
                 $capture = $args[0].Groups[1].Value
                 if ($testCase.Contains($capture))
                 {
-                    $testCase[$capture]
+                    $value = $testCase[$capture]
+                    # skip adding quotes to non-empty strings to avoid adding junk to the
+                    # test name in case you want to expand captures like 'because' or test name
+                    if ($value -isnot [string] -or [string]::IsNullOrEmpty($value))
+                    {
+                        Format-Nicely $value
+                    }
+                    else
+                    {
+                        $value
+                    }
                 }
                 else
                 {
@@ -189,9 +217,9 @@ function ItImpl
 
             $splat = @{
                 Name = $expandedName
-                Scriptblock = $test
+                Scriptblock = $Test
                 Parameters = $testCase
-                ParameterizedSuiteName = $name
+                ParameterizedSuiteName = $Name
                 OutputScriptBlock = $OutputScriptBlock
             }
 
@@ -200,7 +228,7 @@ function ItImpl
     }
     else
     {
-        Invoke-Test -Name $name -ScriptBlock $test @pendingSkip -OutputScriptBlock $OutputScriptBlock
+        Invoke-Test -Name $Name -ScriptBlock $Test @pendingSkip -OutputScriptBlock $OutputScriptBlock
     }
 }
 
@@ -229,129 +257,69 @@ function Invoke-Test
 
     if ($null -eq $Parameters) { $Parameters = @{} }
 
-    $Pester.EnterTest($Name)
-
-    if ($Skip)
+    try
     {
-        $Pester.AddTestResult($Name, "Skipped", $null)
-    }
-    elseif ($Pending)
-    {
-        $Pester.AddTestResult($Name, "Pending", $null)
-    }
-    else
-    {
-        & $SafeCommands['Write-Progress'] -Activity "Running test '$Name'" -Status Processing
-
-        $errorRecord = $null
-        try
+        if ($Skip)
         {
-            Invoke-TestCaseSetupBlocks
-
-            do
-            {
-                $null = & $ScriptBlock @Parameters
-            } until ($true)
+            $Pester.AddTestResult($Name, "Skipped", $null)
         }
-        catch
+        elseif ($Pending)
         {
-            $errorRecord = $_
+            $Pester.AddTestResult($Name, "Pending", $null)
         }
-        finally
+        else
         {
-            #guarantee that the teardown action will run and prevent it from failing the whole suite
+            #todo: disabling the progress for now, it adds a lot of overhead and breaks output on linux, we don't have a good way to disable it by default, or to show it after delay see: https://github.com/pester/Pester/issues/846
+            # & $SafeCommands['Write-Progress'] -Activity "Running test '$Name'" -Status Processing
+
+            $errorRecord = $null
             try
             {
-                if (-not ($Skip -or $Pending))
+                $pester.EnterTest()
+                Invoke-TestCaseSetupBlocks
+
+                do
                 {
-                    Invoke-TestCaseTeardownBlocks
-                }
+                    $null = & $ScriptBlock @Parameters
+                } until ($true)
             }
             catch
             {
                 $errorRecord = $_
             }
+            finally
+            {
+                #guarantee that the teardown action will run and prevent it from failing the whole suite
+                try
+                {
+                    if (-not ($Skip -or $Pending))
+                    {
+                        Invoke-TestCaseTeardownBlocks
+                    }
+                }
+                catch
+                {
+                    $errorRecord = $_
+                }
+
+                $pester.LeaveTest()
+            }
+
+            $result = ConvertTo-PesterResult -Name $Name -ErrorRecord $errorRecord
+            $orderedParameters = Get-OrderedParameterDictionary -ScriptBlock $ScriptBlock -Dictionary $Parameters
+            $Pester.AddTestResult( $result.name, $result.Result, $null, $result.FailureMessage, $result.StackTrace, $ParameterizedSuiteName, $orderedParameters, $result.ErrorRecord )
+            #todo: disabling progress reporting see above & $SafeCommands['Write-Progress'] -Activity "Running test '$Name'" -Completed -Status Processing
         }
-
-
-        $result = Get-PesterResult -ErrorRecord $errorRecord
-        $orderedParameters = Get-OrderedParameterDictionary -ScriptBlock $ScriptBlock -Dictionary $Parameters
-        $Pester.AddTestResult( $result.name, $result.Result, $null, $result.FailureMessage, $result.StackTrace, $ParameterizedSuiteName, $orderedParameters, $result.ErrorRecord )
-        & $SafeCommands['Write-Progress'] -Activity "Running test '$Name'" -Completed -Status Processing
+    }
+    finally
+    {
+        Exit-MockScope -ExitTestCaseOnly
     }
 
     if ($null -ne $OutputScriptBlock)
     {
         $Pester.testresult[-1] | & $OutputScriptBlock
     }
-
-    Exit-MockScope
-    $Pester.LeaveTest()
-}
-
-function Get-PesterResult {
-    param(
-        [Nullable[TimeSpan]] $Time,
-        [System.Management.Automation.ErrorRecord] $ErrorRecord
-    )
-
-    $testResult = @{
-        name = $name
-        time = $time
-        failureMessage = ""
-        stackTrace = ""
-        ErrorRecord = $null
-        success = $false
-        result = "Failed"
-    };
-
-    if(-not $ErrorRecord)
-    {
-        $testResult.Result = "Passed"
-        $testResult.success = $true
-        return $testResult
-    }
-
-    if ($ErrorRecord.FullyQualifiedErrorID -eq 'PesterAssertionFailed')
-    {
-        # we use TargetObject to pass structured information about the error.
-        $details = $ErrorRecord.TargetObject
-
-        $failureMessage = $details.Message
-        $file = $details.File
-        $line = $details.Line
-        $lineText = "`n$line`: $($details.LineText)"
-    }
-    elseif ($ErrorRecord.FullyQualifiedErrorId -eq 'PesterTestInconclusive')
-    {
-        # we use TargetObject to pass structured information about the error.
-        $details = $ErrorRecord.TargetObject
-
-        $failureMessage = $details.Message
-        $file = $details.File
-        $line = $details.Line
-        $lineText = "`n$line`: $($details.LineText)"
-
-        $testResult.Result = 'Inconclusive'
-    }
-    else
-    {
-        $failureMessage = $ErrorRecord.ToString()
-        $file = $ErrorRecord.InvocationInfo.ScriptName
-        $line = $ErrorRecord.InvocationInfo.ScriptLineNumber
-        $lineText = ''
-    }
-
-    $testResult.failureMessage = $failureMessage
-    $testResult.stackTrace = "at line: $line in ${file}${lineText}"
-    $testResult.ErrorRecord = $ErrorRecord
-
-    return $testResult
-}
-
-function Remove-Comments ($Text)
-{
-    $text -replace "(?s)(<#.*#>)" -replace "\#.*"
 }
 
 function Get-OrderedParameterDictionary
@@ -386,7 +354,7 @@ function Get-ParameterDictionary
         [scriptblock] $ScriptBlock
     )
 
-    $guid = [guid]::NewGuid().Guid
+    $guid = [Guid]::NewGuid().Guid
 
     try
     {
