@@ -16,25 +16,30 @@ function BeforeEachFeature {
         The ScriptBlock to run for the hook
 
         .LINK
-        AfterEachFeature
-        BeforeEachScenario
-        AfterEachScenario
+        https://pester.dev/docs/commands/AfterEachFeature
+
+        .LINK
+        https://pester.dev/docs/commands/BeforeEachScenario
+
+        .LINK
+        https://pester.dev/docs/commands/AfterEachScenario
     #>
-    [CmdletBinding(DefaultParameterSetName="All")]
+    [CmdletBinding(DefaultParameterSetName = "All")]
     param(
 
-        [Parameter(Mandatory=$True, Position=0, ParameterSetName="Tags")]
+        [Parameter(Mandatory = $True, Position = 0, ParameterSetName = "Tags")]
         [String[]]$Tags = @(),
 
-        [Parameter(Mandatory=$True, Position=1, ParameterSetName="Tags")]
-        [Parameter(Mandatory=$True, Position=0, ParameterSetName="All")]
+        [Parameter(Mandatory = $True, Position = 1, ParameterSetName = "Tags")]
+        [Parameter(Mandatory = $True, Position = 0, ParameterSetName = "All")]
         [ScriptBlock]$Script
     )
 
     # This shouldn't be necessary, but PowerShell 2 is BAF
     if ($PSCmdlet.ParameterSetName -eq "Tags") {
         ${Script:GherkinHooks}.BeforeEachFeature += @( @{ Tags = $Tags; Script = $Script } )
-    } else {
+    }
+    else {
         ${Script:GherkinHooks}.BeforeEachFeature += @( @{ Tags = @(); Script = $Script } )
     }
 }
@@ -57,25 +62,30 @@ function AfterEachFeature {
         The ScriptBlock to run for the hook
 
         .LINK
-            BeforeEachFeature
-            BeforeEachScenario
-            AfterEachScenario
+        https://pester.dev/docs/commands/BeforeEachFeature
+
+        .LINK
+        https://pester.dev/docs/commands/BeforeEachScenario
+
+        .LINK
+        https://pester.dev/docs/commands/AfterEachScenario
     #>
-    [CmdletBinding(DefaultParameterSetName="All")]
+    [CmdletBinding(DefaultParameterSetName = "All")]
     param(
 
-        [Parameter(Mandatory=$True, Position=0, ParameterSetName="Tags")]
+        [Parameter(Mandatory = $True, Position = 0, ParameterSetName = "Tags")]
         [String[]]$Tags = @(),
 
-        [Parameter(Mandatory=$True, Position=1, ParameterSetName="Tags")]
-        [Parameter(Mandatory=$True, Position=0, ParameterSetName="All")]
+        [Parameter(Mandatory = $True, Position = 1, ParameterSetName = "Tags")]
+        [Parameter(Mandatory = $True, Position = 0, ParameterSetName = "All")]
         [ScriptBlock]$Script
     )
 
     # This shouldn't be necessary, but PowerShell 2 is BAF
     if ($PSCmdlet.ParameterSetName -eq "Tags") {
         ${Script:GherkinHooks}.AfterEachFeature += @( @{ Tags = $Tags; Script = $Script } )
-    } else {
+    }
+    else {
         ${Script:GherkinHooks}.AfterEachFeature += @( @{ Tags = @(); Script = $Script } )
     }
 }
@@ -100,25 +110,31 @@ function BeforeEachScenario {
         The ScriptBlock to run for the hook
 
         .LINK
-        AfterEachFeature
-        BeforeEachScenario
-        AfterEachScenario
+        https://pester.dev/docs/commands/AfterEachScenario
+
+        .LINK
+        https://pester.dev/docs/commands/BeforeEachFeature
+
+        .LINK
+        https://pester.dev/docs/commands/AfterEachFeature
+
     #>
-    [CmdletBinding(DefaultParameterSetName="All")]
+    [CmdletBinding(DefaultParameterSetName = "All")]
     param(
 
-        [Parameter(Mandatory=$True, Position=0, ParameterSetName="Tags")]
+        [Parameter(Mandatory = $True, Position = 0, ParameterSetName = "Tags")]
         [String[]]$Tags = @(),
 
-        [Parameter(Mandatory=$True, Position=1, ParameterSetName="Tags")]
-        [Parameter(Mandatory=$True, Position=0, ParameterSetName="All")]
+        [Parameter(Mandatory = $True, Position = 1, ParameterSetName = "Tags")]
+        [Parameter(Mandatory = $True, Position = 0, ParameterSetName = "All")]
         [ScriptBlock]$Script
     )
 
     # This shouldn't be necessary, but PowerShell 2 is BAF
     if ($PSCmdlet.ParameterSetName -eq "Tags") {
         ${Script:GherkinHooks}.BeforeEachScenario += @( @{ Tags = $Tags; Script = $Script } )
-    } else {
+    }
+    else {
         ${Script:GherkinHooks}.BeforeEachScenario += @( @{ Tags = @(); Script = $Script } )
     }
 }
@@ -141,24 +157,29 @@ function AfterEachScenario {
         The ScriptBlock to run for the hook
 
         .LINK
-            BeforeEachFeature
-            BeforeEachScenario
-            AfterEachScenario
+        https://pester.dev/docs/commands/BeforeEachScenario
+
+        .LINK
+        https://pester.dev/docs/commands/BeforeEachFeature
+
+        .LINK
+        https://pester.dev/docs/commands/AfterEachFeature
     #>
-    [CmdletBinding(DefaultParameterSetName="All")]
+    [CmdletBinding(DefaultParameterSetName = "All")]
     param(
-        [Parameter(Mandatory=$True, Position=0, ParameterSetName="Tags")]
+        [Parameter(Mandatory = $True, Position = 0, ParameterSetName = "Tags")]
         [String[]]$Tags = @(),
 
-        [Parameter(Mandatory=$True, Position=1, ParameterSetName="Tags")]
-        [Parameter(Mandatory=$True, Position=0, ParameterSetName="All")]
+        [Parameter(Mandatory = $True, Position = 1, ParameterSetName = "Tags")]
+        [Parameter(Mandatory = $True, Position = 0, ParameterSetName = "All")]
         [ScriptBlock]$Script
     )
 
     # This shouldn't be necessary, but PowerShell 2 is BAF
-    if($PSCmdlet.ParameterSetName -eq "Tags") {
+    if ($PSCmdlet.ParameterSetName -eq "Tags") {
         ${Script:GherkinHooks}.AfterEachScenario += @( @{ Tags = $Tags; Script = $Script } )
-    } else {
+    }
+    else {
         ${Script:GherkinHooks}.AfterEachScenario += @( @{ Tags = @(); Script = $Script } )
     }
 }

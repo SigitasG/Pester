@@ -1,5 +1,5 @@
 function Context {
-<#
+    <#
 .SYNOPSIS
 Provides logical grouping of It blocks within a single Describe block.
 
@@ -23,6 +23,7 @@ Script that is executed. This may include setup specific to the context
 and one or more It blocks that validate the expected outcomes.
 
 .EXAMPLE
+```ps
 function Add-Numbers($a, $b) {
     return $a + $b
 }
@@ -39,15 +40,28 @@ Describe "Add-Numbers" {
         It "..." { ... }
     }
 }
+```
 
 .LINK
-Describe
-It
-BeforeEach
-AfterEach
-about_Should
-about_Mocking
-about_TestDrive
+https://pester.dev/docs/commands/Describe
+
+.LINK
+https://pester.dev/docs/commands/It
+
+.LINK
+https://pester.dev/docs/commands/BeforeEach
+
+.LINK
+https://pester.dev/docs/commands/AfterEach
+
+.LINK
+https://pester.dev/docs/commands/Should
+
+.LINK
+https://pester.dev/docs/usage/mocking
+
+.LINK
+https://pester.dev/docs/usage/testdrive
 
 #>
     param(
@@ -55,19 +69,25 @@ about_TestDrive
         [string] $Name,
 
         [Alias('Tags')]
-        [string[]] $Tag=@(),
+        [string[]] $Tag = @(),
 
         [Parameter(Position = 1)]
-        [ValidateNotNull()]
-        [ScriptBlock] $Fixture = $(Throw "No test script block is provided. (Have you put the open curly brace on the next line?)")
+        [ScriptBlock] $Fixture
     )
-
-    if ($null -eq (& $SafeCommands['Get-Variable'] -Name Pester -ValueOnly -ErrorAction $script:IgnoreErrorPreference))
-    {
+    if ($Fixture -eq $null) {
+        if ($Name.Contains("`n")) {
+            throw "Test fixture name has multiple lines and no test fixture is provided. (Have you provided a name for the test group?)"
+        }
+        else {
+            throw 'No test fixture is provided. (Have you put the open curly brace on the next line?)'
+        }
+    }
+    if ($null -eq (& $SafeCommands['Get-Variable'] -Name Pester -ValueOnly -ErrorAction $script:IgnoreErrorPreference)) {
         # User has executed a test script directly instead of calling Invoke-Pester
-        $Pester = New-PesterState -Path (& $SafeCommands['Resolve-Path'] .) -TestNameFilter $null -TagFilter @() -SessionState $PSCmdlet.SessionState
-        $script:mockTable = @{}
+        $sessionState = Set-SessionStateHint -PassThru -Hint "Caller - Captured in Context" -SessionState $PSCmdlet.SessionState
+        $Pester = New-PesterState -Path (& $SafeCommands['Resolve-Path'] .) -TestNameFilter $null -TagFilter @() -SessionState $sessionState
+        $script:mockTable = @{ }
     }
 
-    DescribeImpl @PSBoundParameters -CommandUsed 'Context' -Pester $Pester -DescribeOutputBlock ${function:Write-Describe} -TestOutputBlock ${function:Write-PesterResult}
+    DescribeImpl @PSBoundParameters -CommandUsed 'Context' -Pester $Pester -DescribeOutputBlock ${function:Write-Describe} -TestOutputBlock ${function:Write-PesterResult} -NoTestRegistry:('Windows' -ne (GetPesterOs))
 }

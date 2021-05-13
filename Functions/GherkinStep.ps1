@@ -1,5 +1,5 @@
 function GherkinStep {
-<#
+    <#
 .SYNOPSIS
 A step in a test, also known as a Given, When, or Then
 
@@ -20,6 +20,7 @@ The ScriptBlock which defines this step. May accept parameters from regular expr
 capturing groups (named or not), or from tables or multiline strings.
 
 .EXAMPLE
+```ps
 # Gherkin Steps need to be placed in a *.Step.ps1 file
 
 # filename: copyfile.Step.ps1
@@ -46,8 +47,10 @@ Scenario: The file exists, and the target folder exists
     When we call Copy-Item
     Then we have a new file in the destination
     And the new file is the same as the original file
+```
 
 .EXAMPLE
+```ps
 # This example shows a complex regex match that can be used for multiple lines in the feature specification
 # The named match is mapped to the script parameter
 
@@ -64,20 +67,19 @@ Scenario: basic feature support
     And we have a New-Edge function
     And we have a New-Graph function
     And we have a New-Subgraph function
+```
 
 .LINK
-about_gherkin
-Invoke-GherkinStep
 https://sites.google.com/site/unclebobconsultingllc/the-truth-about-bdd
 
 #>
     param(
 
-        [Parameter(Mandatory=$True, Position=0)]
+        [Parameter(Mandatory = $True, Position = 0)]
         [String]$Name,
 
 
-        [Parameter(Mandatory=$True, Position=1)]
+        [Parameter(Mandatory = $True, Position = 1)]
         [ScriptBlock]$Test
     )
     # We need to be able to look up where this step is defined

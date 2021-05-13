@@ -1,7 +1,13 @@
 ﻿Set-StrictMode -Version Latest
 
-function Invoke-PesterInJob ($ScriptBlock, [switch] $GenerateNUnitReport, [switch]$UseStrictPesterMode)
-{
+function Invoke-PesterInJob ($ScriptBlock, [switch] $GenerateNUnitReport, [switch]$UseStrictPesterMode, [Switch]$Verbose) {
+    # running this with -Verbose dumps a lot of confusing
+    # junk into the console, because some of our tests are meant to
+    # fail in the separate job, so use this only for debugging to get
+    # better idea of what is happenin in the job
+    if ($Verbose) {
+        Write-Host "----------- This is running is a separate Pester scope (inside a PowerShell Job) -------------" -ForegroundColor Cyan
+    }
     $PesterPath = Get-Module Pester | Select-Object -First 1 -ExpandProperty Path
 
     $job = Start-Job {
@@ -11,12 +17,11 @@ function Invoke-PesterInJob ($ScriptBlock, [switch] $GenerateNUnitReport, [switc
 
         $params = @{
             PassThru = $true
-            Path = $TestDrive
-            Strict = $UseStrictPesterMode
+            Path     = $TestDrive
+            Strict   = $UseStrictPesterMode
         }
 
-        if ($GenerateNUnitReport)
-        {
+        if ($GenerateNUnitReport) {
             $params['OutputFile'] = "$TestDrive\Temp.Tests.xml"
             $params['OutputFormat'] = 'NUnitXml'
         }
@@ -24,7 +29,17 @@ function Invoke-PesterInJob ($ScriptBlock, [switch] $GenerateNUnitReport, [switc
         Invoke-Pester @params
 
     } -ArgumentList  $PesterPath, $TestDrive, $ScriptBlock, $GenerateNUnitReport, $UseStrictPesterMode
-    $job | Wait-Job | Out-Null
+    if (-not $Verbose) {
+        $job | Wait-Job | Out-Null
+    }
+    else {
+        # receive the Write-Host output, but discard everything that would go to pipeline
+        $job | Wait-Job | Receive-Job | Out-Null
+    }
+
+    if ($Verbose) {
+        Write-Host "---------- End of separate Pester scope (inside a PowerShell Job) -------------" -ForegroundColor Cyan
+    }
 
     #not using Receive-Job to ignore any output to Host
     #TODO: how should this handle errors?
@@ -65,8 +80,8 @@ Describe "Tests running in clean runspace" {
         #tests to be run in different runspace using different Pester instance
         $TestSuite = {
             Describe 'It without ScriptBlock fails' {
-               It "Fails whole describe"
-               It "is not run" { "but it would pass if it was run" }
+                It "Fails whole describe"
+                It "is not run" { "but it would pass if it was run" }
 
             }
         }
@@ -82,10 +97,10 @@ Describe "Tests running in clean runspace" {
         #tests to be run in different runspace using different Pester instance
         $TestSuite = {
             Describe 'PassThru output' {
-               it "Passes" { "pass" }
-               it "fails" { throw }
-               it "Skipped" -Skip {}
-               it "Pending" -Pending {}
+                it "Passes" { "pass" }
+                it "fails" { throw }
+                it "Skipped" -Skip {}
+                it "Pending" -Pending {}
             }
         }
 
@@ -122,18 +137,26 @@ Describe "Tests running in clean runspace" {
         #tests to be run in different runspace using different Pester instance
         $TestSuite = {
             Describe 'Mark skipped and pending tests as failed' {
-               It "skip" -Skip { $true | Should -Be $true }
-               It "pending" -Pending { $true | Should -Be $true }
-               # bug: #885 it does not fail in strict mode
-               # It "inconclusive forced" { Set-TestInconclusive ; $true | Should -Be $true }
+                It "skip" -Skip { $true | Should -Be $true }
+                It "pending" -Pending { $true | Should -Be $true }
+                It "inconclusive forced" { Set-TestInconclusive ; $true | Should -Be $true }
+                It 'skipped by Set-ItResult' {
+                    Set-ItResult -Skipped -Because "it is a test"
+                }
+                It 'pending by Set-ItResult' {
+                    Set-ItResult -Pending -Because "it is a test"
+                }
+                It 'inconclusive by Set-ItResult' {
+                    Set-ItResult -Inconclusive -Because "it is a test"
+                }
             }
         }
 
         $result = Invoke-PesterInJob -ScriptBlock $TestSuite -UseStrictPesterMode
         $result.PassedCount | Should Be 0
-        $result.FailedCount | Should Be 2
+        $result.FailedCount | Should Be 6
 
-        $result.TotalCount | Should Be 2
+        $result.TotalCount | Should Be 6
     }
 }
 
@@ -174,7 +197,7 @@ Describe 'Guarantee It fail on setup or teardown fail (running in clean runspace
                     $true
                 }
 
-                 AfterEach {
+                AfterEach {
                     throw [System.InvalidOperationException] 'test exception'
                 }
             }
@@ -187,8 +210,7 @@ Describe 'Guarantee It fail on setup or teardown fail (running in clean runspace
 
         $result = Invoke-PesterInJob -ScriptBlock $testSuite
 
-        if ($result.PendingCount -ne 1)
-        {
+        if ($result.PendingCount -ne 1) {
             throw "The test suite in separate runspace did not run to completion, it was likely terminated by an uncaught exception thrown in AfterEach."
         }
 
@@ -224,5 +246,159 @@ Describe 'Guarantee It fail on setup or teardown fail (running in clean runspace
             # the first test should fail because after all throws
             $result.FailedCount | Should -Be 1
         }
+    }
+}
+
+Describe "Swallowing output" {
+    It "Invoke-Pester happy path returns only test results" {
+        $tests = {
+            Describe 'Invoke-Pester happy path returns only test results' {
+
+                Set-Content -Path "TestDrive:\Invoke-MyFunction.ps1" -Value @'
+                    function Invoke-MyFunction
+                    {
+                        return $true;
+                }
+'@
+
+                Set-Content -Path "TestDrive:\Invoke-MyFunction.Tests.ps1" -Value @'
+                    . "TestDrive:\Invoke-MyFunction.ps1"
+                    Describe "Invoke-MyFunction Tests" {
+                        It "Should not throw" {
+                            Invoke-MyFunction
+                        }
+                    }
+'@;
+
+                It "Should swallow test output with -PassThru" {
+
+                    $results = Invoke-Pester -Script "TestDrive:\Invoke-MyFunction.Tests.ps1" -PassThru -Show "None";
+
+                    # note - the pipe command unrolls enumerable objects, so we have to wrap
+                    #        results in a sacrificial array to retain its original structure
+                    #        when passed to Should
+                    @(, $results) | Should -BeOfType [PSCustomObject]
+                    $results.TotalCount | Should -Be 1
+
+                    # or, we could do this instead:
+                    # ($results -is [PSCustomObject]) | Should -Be $true
+                    # $results.TotalCount | Should -Be 1
+
+                }
+
+                It "Should swallow test output without -PassThru" {
+                    $results = Invoke-Pester -Script "TestDrive:\Invoke-MyFunction.Tests.ps1" -Show "None"
+                    $results | Should -Be $null
+                }
+
+            }
+        }
+
+        $result = Invoke-PesterInJob -ScriptBlock $tests
+        $result.PassedCount | Should Be 2
+        $result.FailedCount | Should Be 0
+        $result.TotalCount | Should Be 2
+    }
+
+    It "Invoke-Pester swallows pipeline output from system-under-test" {
+        $tests = {
+            Describe 'Invoke-Pester swallows pipeline output from system-under-test' {
+
+                Set-Content -Path "TestDrive:\Invoke-MyFunction.ps1" -Value @'
+                    Write-Output "my system-under-test output"
+                    function Invoke-MyFunction
+                    {
+                        return $true
+                    }
+'@;
+
+                Set-Content -Path "TestDrive:\Invoke-MyFunction.Tests.ps1" -Value @'
+                    . "TestDrive:\Invoke-MyFunction.ps1"
+                    Describe "Invoke-MyFunction Tests" {
+                        It "Should not throw" {
+                            Invoke-MyFunction
+                        }
+                    }
+'@;
+
+                It "Should swallow test output with -PassThru" {
+
+                    $results = Invoke-Pester -Script "TestDrive:\Invoke-MyFunction.Tests.ps1" -PassThru -Show "None"
+
+                    # note - the pipe command unrolls enumerable objects, so we have to wrap
+                    #        results in a sacrificial array to retain its original structure
+                    #        when passed to Should
+                    @(, $results) | Should -BeOfType [PSCustomObject]
+                    $results.TotalCount | Should -Be 1
+
+                    # or, we could do this instead:
+                    # ($results -is [PSCustomObject]) | Should -Be $true
+                    # $results.TotalCount | Should -Be 1
+
+                }
+
+                It "Should swallow test output without -PassThru" {
+                    $results = Invoke-Pester -Script "TestDrive:\Invoke-MyFunction.Tests.ps1" -Show "None"
+                    $results | Should -Be $null
+                }
+
+            }
+        }
+
+        $result = Invoke-PesterInJob -ScriptBlock $tests
+        $result.PassedCount | Should Be 2
+        $result.FailedCount | Should Be 0
+        $result.TotalCount | Should Be 2
+    }
+
+    It "Invoke-Pester swallows pipeline output from test script" {
+        $tests = {
+
+            Describe 'Invoke-Pester swallows pipeline output from test script' {
+
+                Set-Content -Path "TestDrive:\Invoke-MyFunction.ps1" -Value @'
+                    function Invoke-MyFunction
+                    {
+                        return $true
+                    }
+'@;
+
+                Set-Content -Path "TestDrive:\Invoke-MyFunction.Tests.ps1" -Value @'
+                    . "TestDrive:\Invoke-MyFunction.ps1"
+                    Write-Output "my test script output"
+                    Describe "Invoke-MyFunction Tests" {
+                        It "Should not throw" {
+                            Invoke-MyFunction
+                        }
+                    }
+'@;
+
+                It "Should swallow test output with -PassThru" {
+
+                    $results = Invoke-Pester -Script "TestDrive:\Invoke-MyFunction.Tests.ps1" -PassThru -Show "None"
+
+                    # note - the pipe command unrolls enumerable objects, so we have to wrap
+                    #        results in a sacrificial array to retain its original structure
+                    #        when passed to Should
+                    @(, $results) | Should -BeOfType [PSCustomObject]
+                    $results.TotalCount | Should -Be 1
+
+                    # or, we could do this instead:
+                    # ($results -is [PSCustomObject]) | Should -Be $true
+                    # $results.TotalCount | Should -Be 1
+
+                }
+
+                It "Should swallow test output without -PassThru" {
+                    $results = Invoke-Pester -Script "TestDrive:\Invoke-MyFunction.Tests.ps1" -Show "None"
+                    $results | Should -Be $null
+                }
+            }
+        }
+
+        $result = Invoke-PesterInJob -ScriptBlock $tests
+        $result.PassedCount | Should Be 2
+        $result.FailedCount | Should Be 0
+        $result.TotalCount | Should Be 2
     }
 }

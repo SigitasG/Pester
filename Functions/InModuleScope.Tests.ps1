@@ -20,8 +20,12 @@ Describe "Module scope separation" {
 
 Describe "Executing test code inside a module" {
     New-Module -Name TestModule {
-        function InternalFunction { 'I am the internal function' }
-        function PublicFunction   { InternalFunction }
+        function InternalFunction {
+            'I am the internal function'
+        }
+        function PublicFunction {
+            InternalFunction
+        }
         Export-ModuleMember -Function PublicFunction
     } | Import-Module -Force
 
@@ -40,6 +44,17 @@ Describe "Executing test code inside a module" {
         }
     }
 
+    It "Can execute bound ScriptBlock inside the module scope" {
+        $ScriptBlock = { Write-Output "I am a bound ScriptBlock" }
+        InModuleScope TestModule $ScriptBlock | Should -BeExactly "I am a bound ScriptBlock"
+    }
+
+    It "Can execute unbound ScriptBlock inside the module scope" {
+        $ScriptBlockString = 'Write-Output "I am an unbound ScriptBlock"'
+        $ScriptBlock = [ScriptBlock]::Create($ScriptBlockString)
+        InModuleScope TestModule $ScriptBlock | Should -BeExactly "I am an unbound ScriptBlock"
+    }
+
     Remove-Module TestModule -Force
 }
 
@@ -50,8 +65,8 @@ Describe "Get-ScriptModule behavior" {
         It "should throw an exception" {
             {
                 Mock -CommandName "Invoke-MyMethod" `
-                     -ModuleName  "MyNonExistentModule" `
-                     -MockWith    { write-host "my mock called!" }
+                    -ModuleName  "MyNonExistentModule" `
+                    -MockWith { write-host "my mock called!" }
             } | Should Throw "No module named 'MyNonExistentModule' is currently loaded."
         }
 
